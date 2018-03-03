@@ -2,9 +2,10 @@ from __future__ import print_function, division
 
 import numpy as np
 import matplotlib.pyplot as plt
+from numpy.fft import fft, ifft
 
 from skimage.io import imread
-from skimage.transform import radon, rescale, rotate
+from skimage.transform import radon, rescale, rotate, iradon
 from skimage.filters import gaussian
 
 def draw_image(i, img):
@@ -55,12 +56,33 @@ def prepare_tomograph(emitters, dim):
 
 
 def get_intersection(rotation, image, tomograph, real_dim):
+    rotation += 90
     start = int((len(image) - real_dim) / 2)
     rotated = rotate(tomograph, rotation)
     common_part = rotated * image
     common_rotated_again = rotate(common_part, -rotation)
     column_avg = [sum(q) / real_dim for q in common_rotated_again[start:(start+real_dim)]]
     return column_avg
+
+
+def inverse_radon(image, rotations):
+    output_size = len(image)
+    projection = fft(image, axis=0)
+    radon_filtered = np.real(ifft(projection, axis=0))
+    reconstructed = np.zeros((output_size, output_size))
+    mid_index = image.shape[0] // 2
+
+    [X, Y] = np.mgrid[0:output_size, 0:output_size]
+    xpr = X - int(output_size) // 2
+    ypr = Y - int(output_size) // 2
+    th = (np.pi / 180.0) * rotations
+    # Reconstruct image by interpolation
+    for i in range(len(rotations)):
+        theta = th[i]
+        t = ypr * np.cos(theta) - xpr * np.sin(theta)
+        x = np.arange(radon_filtered.shape[0]) - mid_index
+        reconstructed += np.interp(t, x, radon_filtered[:, i],left=0, right=0)
+    return reconstructed
 
 
 image = imread("examples/CT_ScoutView.jpg", as_grey=True)
@@ -71,21 +93,22 @@ tomograph = prepare_tomograph(emitters=emitters_num, dim=np.max(image.shape))
 increased_tomograph = increase_image(tomograph)
 
 res = []
-rotations = range(0, 720, 1)
-for rotation in rotations:
-    res.append(get_intersection(rotation/2, increased_image, increased_tomograph, len(image)))
-res = np.array(res)
-fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(8, 8))
-ax3.imshow(res, cmap=plt.cm.Greys_r)
-# ax1.set_title("Original")
-# ax1.imshow(image, cmap=plt.cm.Greys_r)
 theta = np.linspace(0., 180., max(image.shape), endpoint=False)
+rotations = range(0, 360, 1)
+for rotation in theta:
+    res.append(get_intersection(rotation, increased_image, increased_tomograph, len(image)))
+res = np.array(res)
+fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(8, 8))
+
 sinogram = radon(image, theta=theta, circle=True)
-ax2.set_title("Radon transform\n(Sinogram)")
-ax2.set_xlabel("Projection angle (deg)")
-ax2.set_ylabel("Projection position (pixels)")
+
+i_sin = inverse_radon(sinogram, theta)
+
+ax1.imshow(image, cmap=plt.cm.Greys_r)
 ax2.imshow(sinogram, cmap=plt.cm.Greys_r,
            extent=(0, 180, 0, sinogram.shape[0]), aspect='auto')
+ax4.imshow(i_sin, cmap=plt.cm.Greys_r)
+ax3.imshow(res, cmap=plt.cm.Greys_r)
 
 fig.tight_layout()
 plt.show()
