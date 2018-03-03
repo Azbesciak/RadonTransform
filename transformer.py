@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 from skimage.io import imread
 from skimage.transform import radon, rescale, rotate
+from skimage.filters import gaussian
 
 def draw_image(i, img):
     plt.subplot(1, 2, i)
@@ -49,6 +50,7 @@ def prepare_tomograph(emitters, dim):
     distance = int(dim / emitters)
     start = int(np.ceil((dim % distance) / 2))
     zeros[:, start::distance] = 1
+    zeros = gaussian(zeros)
     return zeros
 
 
@@ -69,9 +71,10 @@ tomograph = prepare_tomograph(emitters=emitters_num, dim=np.max(image.shape))
 increased_tomograph = increase_image(tomograph)
 
 res = []
-for rotation in range(0, 720, 1):
+rotations = range(0, 720, 1)
+for rotation in rotations:
     res.append(get_intersection(rotation/2, increased_image, increased_tomograph, len(image)))
-
+res = np.array(res)
 fig, (ax2, ax3) = plt.subplots(1, 2, figsize=(8, 8))
 ax3.imshow(res, cmap=plt.cm.Greys_r)
 # ax1.set_title("Original")
