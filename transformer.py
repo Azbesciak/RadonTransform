@@ -7,6 +7,8 @@ from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
 
+
+img_name_root = "examples/"
 images = [
     "CT_ScoutView.jpg",
     "CT_ScoutView-large.jpg",
@@ -18,6 +20,7 @@ images = [
     "SADDLE_PE-large.JPG",
     "Shepp_logan.jpg"
 ]
+images = [img_name_root + n for n in images]
 
 is_with_filter = True
 image_indx = 1
@@ -152,17 +155,27 @@ def transform_sinogram_if_enabled():
         return sinogram
 
 
-image = imread("examples/" + image_name, as_grey=True)
-image = rescale(image, scale=0.4, mode='reflect')
-max_image_value = np.max(image)
-if max_image_value > 1:
-    image /= 255
-image = make_image_square(image)
+def read_image(name):
+    image = imread(name, as_grey=True)
+    image = rescale(image, scale=0.4, mode='reflect')
+    max_image_value = np.max(image)
+    if max_image_value > 1:
+        image /= 255
+    return image
+
+
+def prepare_instance(img_name):
+    theta = get_moves()
+    image = read_image(img_name)
+    image = make_image_square(image)
+    return image, theta
+
+
+image, theta = prepare_instance(image_name)
 increased_image = increase_image(image)
 tomograph = prepare_tomograph(emitters=emitters_num, dim=np.max(image.shape))
 increased_tomograph = increase_image(tomograph)
 
-theta = get_moves()
 sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)
 sinogram_transformed = transform_sinogram_if_enabled()
 i_sin = inverse_radon(sinogram_transformed, theta, len(image))
