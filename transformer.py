@@ -25,16 +25,13 @@ images = [img_name_root + n for n in images]
 is_with_filter = True
 image_indx = 1
 image_name = images[image_indx]
-
 alpha = 360/1440
+emitters_num = 40
 
 
 def draw_image(i, img):
     plt.subplot(1, 2, i)
     plt.imshow(img, cmap=plt.cm.Greys_r)
-
-
-emitters_num = 40
 
 
 def make_image_square(img):
