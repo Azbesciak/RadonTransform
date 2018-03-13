@@ -7,9 +7,23 @@ from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
 
-image_name = "CT_ScoutView.jpg"
-# image_name = "Shepp_logan.jpg"
-# image_name = "kolo.jpg"
+images = [
+    "CT_ScoutView.jpg",
+    "CT_ScoutView-large.jpg",
+    "Kolo.jpg",
+    "Kropka.jpg",
+    "Kwadraty2.jpg",
+    "Paski2.jpg",
+    "SADDLE_PE.JPG",
+    "SADDLE_PE-large.JPG",
+    "Shepp_logan.jpg"
+]
+
+is_with_filter = True
+image_indx = 1
+image_name = images[image_indx]
+
+alpha = 360/1440
 
 
 def draw_image(i, img):
@@ -114,9 +128,28 @@ def inverse_radon(sigmoid, rotations, output_size):
     result = reconstructed[start:end, start:end]
     if rotations_len > 0:
         result /= rotations_len
-    # result[result<0] = 0
-    # result = adjust_gamma(result, 2)
     return result
+
+
+def get_moves():
+    return [alpha * i for i in range(int(np.ceil(360 / alpha)))]
+
+
+def show_images(original, sinogram, reconstructed):
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 8))
+    ax1.imshow(original, cmap=plt.cm.Greys_r)
+    ax2.imshow(sinogram, cmap=plt.cm.Greys_r)
+    ax3.imshow(reconstructed, cmap=plt.cm.Greys_r)
+
+    fig.tight_layout()
+    plt.show()
+
+
+def transform_sinogram_if_enabled():
+    if is_with_filter:
+        return transform_sinogram(sinogram)
+    else:
+        return sinogram
 
 
 image = imread("examples/" + image_name, as_grey=True)
@@ -129,20 +162,9 @@ increased_image = increase_image(image)
 tomograph = prepare_tomograph(emitters=emitters_num, dim=np.max(image.shape))
 increased_tomograph = increase_image(tomograph)
 
-theta = np.linspace(0., 360., 1440, endpoint=False)
+theta = get_moves()
 sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)
-fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 8))
-sinogram_transformed = transform_sinogram(sinogram)
-# theta = np.linspace(0., 180., max(image.shape), endpoint=False)
-# sinogram = radon(image, theta=theta, circle=True)
+sinogram_transformed = transform_sinogram_if_enabled()
 i_sin = inverse_radon(sinogram_transformed, theta, len(image))
-# i_sin = iradon(sinogram, theta=theta)
 
-ax1.imshow(image, cmap=plt.cm.Greys_r)
-# ax2.imshow(res, cmap=plt.cm.Greys_r,
-#            extent=(0, 180, 0, res.shape[0]), aspect='auto')
-ax2.imshow(sinogram, cmap=plt.cm.Greys_r)
-ax3.imshow(i_sin, cmap=plt.cm.Greys_r)
-
-fig.tight_layout()
-plt.show()
+show_images(image, sinogram, i_sin)
