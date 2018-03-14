@@ -6,6 +6,7 @@ from numpy.fft import fftfreq, fft, ifft
 from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
+import warnings
 
 
 img_name_root = "examples/"
@@ -22,11 +23,30 @@ images = [
 ]
 images = [img_name_root + n for n in images]
 
-is_with_filter = True
 image_indx = 1
-image_name = images[image_indx]
-alpha = 360/1440
-emitters_num = 40
+
+class Parameters:
+    def __init__(self, alpha, emitters_num, use_filter, image_name) -> None:
+        super().__init__()
+        self.alpha = alpha
+        self.emitters_num = emitters_num
+        self.use_filter = use_filter
+        self.image_name = image_name
+
+    def set_values(self, alpha, emitters_num, use_filter, image_name):
+        if alpha <= 0:
+            raise Exception("Alpha must be positive")
+        if emitters_num <=0:
+            raise Exception("Emitters num must be positive")
+        if image_name is None:
+            raise Exception("Image was not selected")
+        self.alpha = alpha
+        self.emitters_num = emitters_num
+        self.use_filter = use_filter
+        self.image_name = image_name
+
+
+params = Parameters(360/1440, 40, True, images[image_indx])
 
 
 def draw_image(i, img):
@@ -71,6 +91,8 @@ def create_filter_at(target, start, distance, filter):
 
 
 def prepare_tomograph(emitters, dim):
+    if emitters > dim:
+        warnings.warn("emmiters num was bigger than image dim - used smaller")
     emitters = np.min((emitters, dim))
     zeros = np.zeros((dim, dim))
     distance = int(dim / emitters)
@@ -131,8 +153,8 @@ def inverse_radon(sigmoid, rotations, output_size):
     return result
 
 
-def get_moves():
-    return [alpha * i for i in range(int(np.ceil(360 / alpha)))]
+def get_moves(a):
+    return [a * i for i in range(int(np.ceil(360 / a)))]
 
 
 def show_images(original, sinogram, reconstructed):
@@ -145,8 +167,8 @@ def show_images(original, sinogram, reconstructed):
     plt.show()
 
 
-def transform_sinogram_if_enabled():
-    if is_with_filter:
+def transform_sinogram_if_enabled(params):
+    if params.use_filter:
         return transform_sinogram(sinogram)
     else:
         return sinogram
@@ -161,20 +183,22 @@ def read_image(name):
     return image
 
 
-def prepare_instance(img_name):
-    theta = get_moves()
-    image = read_image(img_name)
+def prepare_instance(params):
+    theta = get_moves(params.alpha)
+    image = read_image(params.image_name)
     image = make_image_square(image)
     return image, theta
 
 
-image, theta = prepare_instance(image_name)
-increased_image = increase_image(image)
-tomograph = prepare_tomograph(emitters=emitters_num, dim=np.max(image.shape))
-increased_tomograph = increase_image(tomograph)
+if __name__ == "__main__":
+    image, theta = prepare_instance(params)
+    increased_image = increase_image(image)
+    tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(image.shape))
+    increased_tomograph = increase_image(tomograph)
 
-sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)
-sinogram_transformed = transform_sinogram_if_enabled()
-i_sin = inverse_radon(sinogram_transformed, theta, len(image))
+    sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)
+    sinogram_transformed = transform_sinogram_if_enabled(params)
+    i_sin = inverse_radon(sinogram_transformed, theta, len(image))
 
-show_images(image, sinogram, i_sin)
+    show_images(image, sinogram, i_sin)
+
