@@ -23,11 +23,10 @@ images = [
 ]
 images = [img_name_root + n for n in images]
 
-image_indx = 1
+image_indx = 4
 
 class Parameters:
     def __init__(self, alpha, emitters_num, use_filter, image_name) -> None:
-        super().__init__()
         self.alpha = alpha
         self.emitters_num = emitters_num
         self.use_filter = use_filter
@@ -115,10 +114,9 @@ def get_intersection(rotation, image, tomograph, real_dim):
 
 
 def make_radon(increased_image, increased_tomograph, real_dim, theta):
-    res = []
-    for rotation in theta:
-        res.append(get_intersection(rotation, increased_image, increased_tomograph, real_dim))
-    res = np.array(res)
+    res = np.zeros((len(theta), real_dim))
+    for i, rotation in enumerate(theta):
+        res[i] = get_intersection(rotation, increased_image, increased_tomograph, real_dim)
     return res
 
 
@@ -188,6 +186,16 @@ def prepare_instance(params):
     image = read_image(params.image_name)
     image = make_image_square(image)
     return image, theta
+
+
+class Scanner:
+
+    def __init__(self, params) -> None:
+        self.params = params
+        self.image, self.theta = prepare_instance(params)
+        self.tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(image.shape))
+        self.increased_tomograph = increase_image(tomograph)
+        # sinogram =
 
 
 if __name__ == "__main__":
