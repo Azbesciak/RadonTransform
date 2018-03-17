@@ -1,3 +1,5 @@
+from threading import Thread
+
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import fftfreq, fft, ifft
@@ -5,8 +7,6 @@ from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
 import warnings
-from matplotlib.animation import FuncAnimation
-
 
 img_name_root = "examples/"
 images = [
@@ -139,22 +139,32 @@ def transform_sinogram(sinogram):
     return np.rot90(radon_filtered, k=-1)
 
 
+def norm(mat):
+    mat_min = mat.min()
+    mat -= mat_min
+    mat_max = mat.max()
+    if mat_max > 0:
+        mat /= mat_max
+    return mat
+
+
 def inverse_radon(sigmoid, rotations, output_size, on_change=None):
     reconstructed = increase_image(np.zeros((output_size, output_size)))
     start = (len(reconstructed) - output_size) // 2
     end = start + output_size
     rotations_len = len(rotations)
+    result = reconstructed[start:end, start:end]
     for i in range(rotations_len):
         temp = np.array([sigmoid[i], ] * len(reconstructed))
         temp = make_image_square(temp)
         reconstructed += rotate(temp, rotations[i])
         result = reconstructed[start:end, start:end]
+        result = norm(result)
         if on_change is not None:
             on_change(isi=result)
-    result = reconstructed[start:end, start:end]
 
-    if rotations_len > 0:
-        result /= rotations_len
+    # if rotations_len > 0:
+    #     result /= rotations_len
     return result
 
 
@@ -193,10 +203,11 @@ def prepare_instance(params):
     return image, theta
 
 
-class Scanner:
+class Scanner(Thread):
     update_time = 0.2
 
-    def __init__(self, params) -> None:
+    def __init__(self, params, plot, on_finish=lambda: None) -> None:
+        super().__init__(target=self.watch_changes)
         self.params = params
         self.image, self.theta = prepare_instance(params)
         self.increased_image = increase_image(self.image)
@@ -205,57 +216,36 @@ class Scanner:
         self.sinogram = None
         self.sinogram_transformed = None
         self.i_sin = None
-        self.fig = None
-        self.ax1 = self.ax2 = self.ax3 = None
-        self.last_time = 0
-        self.im2 = self.im3 = None
         self.im2c = self.im3c = False
-        self.ani1 = self.ani2 = None
+        self.on_finish = on_finish
+        self.plot = plot
 
     def assign(self, si=None, isi=None, tisi=None):
         if si is not None:
-            self.sinogram = si
+            if self.sinogram is None:
+                self.sinogram = si
+                self.plot.on_sinogram(si)
+            else:
+                self.sinogram = si
             self.im2c = True
-            if self.im2 is None:
-                self.im2 = self.ax2.imshow(self.sinogram, cmap=plt.cm.Greys_r, animated=True)
         if isi is not None:
-            self.i_sin = isi
+            if self.i_sin is None:
+                self.i_sin = isi
+                self.plot.on_isinogram(isi)
+            else:
+                self.i_sin = isi
             self.im3c = True
-            if self.im3 is None:
-                self.im3 = self.ax3.imshow(self.i_sin, cmap=plt.cm.Greys_r, animated=True)
         if tisi is not None:
             self.sinogram_transformed = tisi
 
     def watch_changes(self):
-        self.init_chart()
+        self.plot.on_new_scan(self.image)
         sinogram = make_radon(self.increased_image, self.increased_tomograph,
                               len(self.image), self.theta, on_change=self.assign)
         sinogram_transformed = transform_sinogram_if_enabled(self.params, sinogram)
         self.assign(tisi=sinogram_transformed)
         i_sin = inverse_radon(sinogram_transformed, self.theta, len(self.image), on_change=self.assign)
-
-    def update_sin(self, *f):
-        print("INVOKED")
-        if self.im2 is not None and self.im2c:
-            self.im2c = False
-            self.im2.set_array(self.sinogram)
-        return self.im2,
-
-    def update_isin(self, *f):
-        print("INVOKED")
-        if self.im3 is not None and self.im3c:
-            self.im3c = False
-            self.im3.set_array(self.i_sin)
-        return self.im3,
-
-    def init_chart(self):
-        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(1, 3, figsize=(8, 8))
-        self.ax1.imshow(self.image, cmap=plt.cm.Greys_r)
-        print("ini")
-        self.ani1 = FuncAnimation(self.fig, self.update_sin, blit=True, interval=50)
-        self.ani2 = FuncAnimation(self.fig, self.update_isin, blit=True, interval=50)
-        plt.show()
-        # self.fig.canvas.draw()
+        self.on_finish()
 
 
 if __name__ == "__main__":
