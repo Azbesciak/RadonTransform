@@ -22,7 +22,7 @@ images = [
 ]
 images = [img_name_root + n for n in images]
 
-image_indx = 8
+image_indx = 7
 
 
 class Parameters:
@@ -46,7 +46,7 @@ class Parameters:
         self.image_name = image_name
 
 
-params = Parameters(180 / 360, 80, True, images[image_indx])
+params = Parameters(180 / 360, 800, True, images[image_indx])
 
 
 def draw_image(i, img):
@@ -142,9 +142,7 @@ def transform_sinogram(sinogram):
 def norm(mat):
     mat_min = mat.min()
     mat -= mat_min
-    mat_max = mat.max()
-    if mat_max > 0:
-        mat /= mat_max
+    mat[mat > 1] = 1
     return mat
 
 
@@ -159,12 +157,10 @@ def inverse_radon(sigmoid, rotations, output_size, on_change=None):
         temp = make_image_square(temp)
         reconstructed += rotate(temp, rotations[i])
         result = reconstructed[start:end, start:end]
-        result = norm(result)
         if on_change is not None:
             on_change(isi=result)
 
-    # if rotations_len > 0:
-    #     result /= rotations_len
+    result = norm(result)
     return result
 
 

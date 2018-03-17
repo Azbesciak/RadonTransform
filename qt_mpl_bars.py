@@ -157,12 +157,14 @@ class PlotCanvas(FigureCanvas):
         if self.im2 is not None and self.scanner.im2c:
             self.scanner.im2c = False
             self.im2.set_data(self.scanner.sinogram)
+            self.im3.norm.autoscale(self.scanner.sinogram)
         return self.im2,
 
     def update_isin(self, *f):
         if self.im3 is not None and self.scanner.im3c:
             self.scanner.im3c = False
             self.im3.set_data(self.scanner.i_sin)
+            self.im3.norm.autoscale(self.scanner.i_sin)
         return self.im3,
 
     def clean(self):
