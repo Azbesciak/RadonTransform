@@ -216,7 +216,13 @@ class PlotCanvas(FigureCanvas):
     @staticmethod
     def get_medium_squared_error(original, reconstructed):
         if original is not None and reconstructed is not None:
-            dif = original - reconstructed
+            original_copy = original - original.min()
+            reconstructed_copy = reconstructed - reconstructed.min()
+            org_copy_max = original_copy.max()
+            rec_copy_max = reconstructed_copy.max()
+            if rec_copy_max > 0 and org_copy_max > 0 and rec_copy_max is not org_copy_max:
+                reconstructed_copy /= (rec_copy_max / org_copy_max)
+            dif = original_copy - reconstructed_copy
             dif **= 2
             return dif.sum() / dif.size
         else:
