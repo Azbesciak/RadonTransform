@@ -20,7 +20,7 @@ images = [
 ]
 images = [img_name_root + n for n in images]
 
-image_indx = 7
+image_indx = 8
 
 
 class Parameters:
@@ -103,22 +103,21 @@ def prepare_tomograph(emitters, dim, use_gauss):
     emitters = np.min((emitters, dim))
     tomo = np.zeros((dim, dim))
     distance = int(dim / emitters)
-    start = int(np.ceil((dim % distance) / 2))
+    start = int(np.ceil(distance / 2))
     create_filter_at(tomo, start, distance, [1])
     if use_gauss:
         tomo = gaussian(tomo)
     tomo /= tomo.max()
+    tomo = np.rot90(tomo)
     return tomo
 
 
 def get_intersection(rotation, image, tomograph, real_dim):
     rotation += 90
-    target_size = len(image)
-    start = int((target_size - real_dim) / 2)
     rotated = rotate(tomograph, rotation)
     common_part = rotated * image
     common_rotated_again = rotate(common_part, -rotation)
-    column_avg = [sum(q) / real_dim for q in common_rotated_again]  # [start:(start + real_dim)]
+    column_avg = [sum(q) / real_dim for q in common_rotated_again]
     return column_avg
 
 
