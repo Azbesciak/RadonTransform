@@ -1,5 +1,3 @@
-from threading import Thread
-
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import fftfreq, fft, ifft
@@ -27,13 +25,14 @@ image_indx = 7
 
 class Parameters:
 
-    def __init__(self, alpha, emitters_num, use_filter, image_name) -> None:
+    def __init__(self, alpha, emitters_num, use_filter, image_name, use_gauss=True) -> None:
         self.alpha = alpha
         self.emitters_num = emitters_num
         self.use_filter = use_filter
         self.image_name = image_name
+        self.use_gauss = use_gauss
 
-    def set_values(self, alpha, emitters_num, use_filter, image_name):
+    def set_values(self, alpha, emitters_num, use_filter, image_name, use_gauss):
         if alpha <= 0:
             raise Exception("Alpha must be positive")
         if emitters_num <= 0:
@@ -44,6 +43,7 @@ class Parameters:
         self.emitters_num = emitters_num
         self.use_filter = use_filter
         self.image_name = image_name
+        self.use_gauss = use_gauss
 
 
 params = Parameters(180 / 360, 800, True, images[image_indx])
@@ -90,17 +90,18 @@ def create_filter_at(target, start, distance, filter):
         target[:, start + to_write[0]::distance] = filter[i]
 
 
-def prepare_tomograph(emitters, dim):
+def prepare_tomograph(emitters, dim, use_gauss):
     if emitters > dim:
         warnings.warn("emmiters num was bigger than image dim - used smaller")
     emitters = np.min((emitters, dim))
-    zeros = np.zeros((dim, dim))
+    tomo = np.zeros((dim, dim))
     distance = int(dim / emitters)
     start = int(np.ceil((dim % distance) / 2))
-    create_filter_at(zeros, start, distance, [1])
-    zeros = gaussian(zeros)
-    zeros /= zeros.max()
-    return zeros
+    create_filter_at(tomo, start, distance, [1])
+    if use_gauss:
+        tomo = gaussian(tomo)
+    tomo /= tomo.max()
+    return tomo
 
 
 def get_intersection(rotation, image, tomograph, real_dim):
@@ -142,7 +143,10 @@ def transform_sinogram(sinogram):
 def norm(mat):
     mat_min = mat.min()
     mat -= mat_min
-    mat[mat > 1] = 1
+    mat_max = mat.max()
+    if mat_max > 0:
+        mat /= mat_max
+    # mat[mat > 1] = 1
     return mat
 
 
@@ -199,15 +203,15 @@ def prepare_instance(params):
     return image, theta
 
 
-class Scanner(Thread):
+class Scanner:
     update_time = 0.2
 
     def __init__(self, params, plot, on_finish=lambda: None) -> None:
-        super().__init__(target=self.watch_changes)
         self.params = params
         self.image, self.theta = prepare_instance(params)
         self.increased_image = increase_image(self.image)
-        self.tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(self.image.shape))
+        self.tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(self.image.shape),
+                                           use_gauss=params.use_gauss)
         self.increased_tomograph = increase_image(self.tomograph)
         self.sinogram = None
         self.sinogram_transformed = None
@@ -247,7 +251,7 @@ class Scanner(Thread):
 if __name__ == "__main__":
     image, theta = prepare_instance(params)
     increased_image = increase_image(image)
-    tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(image.shape))
+    tomograph = prepare_tomograph(emitters=params.emitters_num, dim=np.max(image.shape), use_gauss=params.use_gauss)
     increased_tomograph = increase_image(tomograph)
 
     sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)

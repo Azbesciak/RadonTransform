@@ -1,11 +1,10 @@
 import sys
 import traceback
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenu, QVBoxLayout, QSizePolicy, QMessageBox, QWidget, \
-    QPushButton, QLineEdit, QLabel, QCheckBox, QDoubleSpinBox, QSpinBox
-from PyQt5.QtGui import QIcon, QIntValidator, QDoubleValidator
+from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
+from PyQt5.QtCore import *
 from file_select import SelectFileButton
-
 import matplotlib.animation as animation
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -26,13 +25,13 @@ class App(QMainWindow):
         self.left = 40
         self.top = 40
         self.title = 'Radon Transformation'
-        self.width = 700
-        self.height = 400
-        self.file_select = self.run_btn = self.emitters_inp = self.alpha_inp = self.use_filter_cbx = None
+        self.width = 1000
+        self.height = 800
+        self.file_select = self.run_btn = self.emitters_inp = self.alpha_inp =\
+            self.use_filter_cbx = self.use_gauss = None
         self.plot = None
         self.scanner = None
-        self.is_im_ready = self.is_sin_ready = self.is_isin_ready = False
-        self.is_im_working = self.is_sin_working = self.is_isin_working = False
+        self.is_working = False
         self.initUI()
 
     def initUI(self):
@@ -43,8 +42,8 @@ class App(QMainWindow):
         self.show()
 
     def init_plot(self):
-        self.plot = PlotCanvas(self, width=5, height=4, dpi=170)
-        self.plot.move(-80, -100)
+        self.plot = PlotCanvas(self, width=5, height=4, dpi=230)
+        self.plot.move(-100, -50)
 
     def init_buttons(self):
         self.add_file_select()
@@ -52,36 +51,59 @@ class App(QMainWindow):
         self.add_emitters_input()
         self.add_alpha_input()
         self.add_use_filter_input()
+        self.add_use_gauss_ckbx()
         self.run_btn.clicked.connect(self.run_task)
 
     def run_task(self, e):
         try:
-            self.run_btn.disabled = True
-            if self.scanner:
-                self.scanner.join()
+            if self.is_working:
+                return
+            self.is_working = True
+            print("New task started.")
+
+            self.run_btn.setDisabled(True)
+            self.plot.update_medium_error_value()
             tr.params.set_values(self.alpha_inp.value(), self.emitters_inp.value(),
-                                 self.use_filter_cbx.isChecked(), self.file_select.file_name)
+                                 self.use_filter_cbx.isChecked(), self.file_select.file_name,
+                                 self.use_gauss.isChecked())
             self.scanner = tr.Scanner(tr.params, self.plot, self.on_finish)
-            self.plot.set_scanner(self.scanner)
-            self.scanner.start()
+            self.plot.init_new_scan(self.scanner)
+            Thread(target=lambda: self.scanner.watch_changes()).start()
         except Exception as e:
             traceback.print_exc()
-            self.run_btn.disabled = False
+            self.is_working = False
+            self.run_btn.setDisabled(False)
+            self.plot.clean()
 
     def on_finish(self):
-        self.run_btn.disabled = False
-        # self.plot.clean()
+        print("finished work!")
+        self.is_working = False
+        self.run_btn.setDisabled(False)
+        time.sleep(0.05)
+        self.plot.clean()
 
     def add_run_button(self):
-        x = App.get_x_position(4)
+        x = App.get_x_position(5)
         self.run_btn = QPushButton("Run", self)
         self.run_btn.clicked.connect(self.run_task)
         self.run_btn.move(x, input_margin)
 
     def add_file_select(self):
-        x = App.get_x_position(3)
+        x = App.get_x_position(4)
         self.file_select = SelectFileButton('Select file', self)
         self.file_select.move(x, input_margin)
+
+    def add_use_gauss_ckbx(self):
+        x = App.get_x_position(3)
+        self.use_gauss = QCheckBox('Use Gauss\nfor tomograph', self)
+        self.use_gauss.setChecked(tr.params.use_filter)
+        self.use_gauss.move(x, input_margin)
+
+    def add_use_filter_input(self):
+        x = App.get_x_position(2)
+        self.use_filter_cbx = QCheckBox('Use sinogram\nfilter', self)
+        self.use_filter_cbx.setChecked(tr.params.use_filter)
+        self.use_filter_cbx.move(x, input_margin)
 
     def add_emitters_input(self):
         x = App.get_x_position(1)
@@ -91,12 +113,6 @@ class App(QMainWindow):
         self.emitters_inp.setMaximum(4000)
         self.emitters_inp.setValue(tr.params.emitters_num)
         self.emitters_inp.move(x, input_margin)
-
-    def add_use_filter_input(self):
-        x = App.get_x_position(2)
-        self.use_filter_cbx = QCheckBox('Use sinogram filter', self)
-        self.use_filter_cbx.setChecked(tr.params.use_filter)
-        self.use_filter_cbx.move(x, input_margin)
 
     def add_alpha_input(self):
         x = App.get_x_position(0)
@@ -117,10 +133,15 @@ class PlotCanvas(FigureCanvas):
         self.ax1.set_axis_off()
         self.ax2.set_axis_off()
         self.ax3.set_axis_off()
+        self.image = None
+        self.medium_error = 0
+        self.medium_error_label = None
         self.im1 = self.im2 = self.im3 = None
         self.ani2 = self.ani3 = None
+        self.ta2 = self.ta3 = None
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
+        self.create_error_label(parent)
         self.scanner = None
         FigureCanvas.setSizePolicy(self,
                                    QSizePolicy.Expanding,
@@ -130,48 +151,81 @@ class PlotCanvas(FigureCanvas):
 
     def plot(self):
         zeros = np.zeros((400, 400))
-        self.ax1.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
-        self.ax2.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
-        self.ax3.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
+        self.im1 = self.ax1.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
+        self.im2 = self.ax2.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
+        self.im3 = self.ax3.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
         self.draw()
 
-    def set_scanner(self, scanner):
+    def init_new_scan(self, scanner):
+        self.plot()
         self.scanner = scanner
-        if self.ani2:
-            self.ani2.event_source.stop()
-        if self.ani3:
-            self.ani3.event_source.stop()
+        self.clean()
         self.ani2 = animation.FuncAnimation(self.fig, self.update_sin, interval=50, blit=True)
         self.ani3 = animation.FuncAnimation(self.fig, self.update_isin, interval=50, blit=True)
 
     def on_new_scan(self, image):
-        self.ax1.imshow(image, cmap=plt.cm.Greys_r)
+        self.image = image
+        print("new scan!")
+        self.update_chart(self.im1, image)
 
     def on_sinogram(self, sinogram):
+        print("new sinogram came")
         self.im2 = self.ax2.imshow(sinogram, cmap=plt.cm.Greys_r, animated=True)
 
     def on_isinogram(self, i_sin):
+        print("reverse transformation started")
         self.im3 = self.ax3.imshow(i_sin, cmap=plt.cm.Greys_r, animated=True)
 
-    def update_sin(self, *f):
-        if self.im2 is not None and self.scanner.im2c:
+    def update_sin(self, _):
+        if self.scanner.im2c:
             self.scanner.im2c = False
-            self.im2.set_data(self.scanner.sinogram)
-            self.im3.norm.autoscale(self.scanner.sinogram)
+            self.update_chart(self.im2, self.scanner.sinogram)
         return self.im2,
 
-    def update_isin(self, *f):
-        if self.im3 is not None and self.scanner.im3c:
+    def update_isin(self, _):
+        if self.scanner.im3c:
             self.scanner.im3c = False
-            self.im3.set_data(self.scanner.i_sin)
-            self.im3.norm.autoscale(self.scanner.i_sin)
+            self.update_chart(self.im3, self.scanner.i_sin)
+            self.medium_error = self.get_medium_squared_error(self.image, self.scanner.i_sin)
+            self.update_medium_error_value(self.medium_error)
         return self.im3,
 
+    @staticmethod
+    def update_chart(im, data):
+        im.set_data(data)
+        im.norm.autoscale(data)
+
+    def create_error_label(self, parent):
+        self.medium_error_label = QLabel(parent)
+        self.medium_error_label.move(700, 40)
+        self.medium_error_label.setFixedWidth(200)
+
+    def update_medium_error_value(self, value=0):
+        self.medium_error_label.setText("medium square error: %6.4f" % value)
+
     def clean(self):
+        if self.ani2 is not None:
+            self.ani2.event_source.stop()
+        if self.ani3 is not None:
+            self.ani3.event_source.stop()
         self.ani3 = self.ani2 = None
+
+    @staticmethod
+    def get_medium_squared_error(original, reconstructed):
+        if original is not None and reconstructed is not None:
+            dif = original - reconstructed
+            dif **= 2
+            return dif.sum() / dif.size
+        else:
+            return 0
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = App()
-    sys.exit(app.exec_())
+    res = 0
+    try:
+        ex = App()
+        res = app.exec_()
+    except Exception:
+        print("exiting")
+    sys.exit(res)
