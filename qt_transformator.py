@@ -1,18 +1,16 @@
 import sys
+import time
 import traceback
+from threading import Thread
 
-from PyQt5.QtWidgets import *
-from PyQt5.QtGui import *
-from PyQt5.QtCore import *
-from file_select import SelectFileButton
 import matplotlib.animation as animation
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
-import time
-from threading import Thread
+from PyQt5.QtWidgets import *
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
 import transformer as tr
+from file_select import SelectFileButton
 
 label_margin = 10
 input_margin = 40
@@ -186,9 +184,12 @@ class PlotCanvas(FigureCanvas):
         if self.scanner.im3c:
             self.scanner.im3c = False
             self.update_chart(self.im3, self.scanner.i_sin)
-            self.medium_error = self.get_medium_squared_error(self.image, self.scanner.i_sin)
-            self.update_medium_error_value(self.medium_error)
+            self.count_medium_error()
         return self.im3,
+
+    def count_medium_error(self):
+        self.medium_error = self.get_medium_squared_error(self.image, self.scanner.i_sin)
+        self.update_medium_error_value(self.medium_error)
 
     @staticmethod
     def update_chart(im, data):
@@ -204,6 +205,8 @@ class PlotCanvas(FigureCanvas):
         self.medium_error_label.setText("medium square error: %6.4f" % value)
 
     def clean(self):
+        if self.scanner is not None:
+            self.count_medium_error()
         if self.ani2 is not None:
             self.ani2.event_source.stop()
         if self.ani3 is not None:
