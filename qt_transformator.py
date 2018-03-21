@@ -73,6 +73,9 @@ class App(QMainWindow):
             self.run_btn.setDisabled(False)
             self.plot.clean()
 
+    def on_image(self, file_name, run_btn):
+        pass
+
     def on_finish(self):
         print("finished work!")
         self.is_working = False
