@@ -1,3 +1,5 @@
+import traceback
+
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.fft import fftfreq, fft, ifft
@@ -24,6 +26,13 @@ images = [img_name_root + n for n in images]
 image_indx = 8
 
 
+class TransformSnapshot:
+
+    def __init__(self, sinogram=None, i_sin=None) -> None:
+        self.sinogram = sinogram
+        self.i_isn = i_sin
+
+
 class Parameters:
 
     def __init__(self, alpha, emitters_num, use_filter, image_name, use_gauss=True, use_omega=False) -> None:
@@ -34,7 +43,7 @@ class Parameters:
         self.use_gauss = use_gauss
         self.use_omega = use_omega
 
-    def set_values(self, alpha, emitters_num, use_filter, image_name, use_gauss, use_omega=False):
+    def set_values(self, alpha, emitters_num, use_filter, image_name, use_gauss=True, use_omega=False):
         if alpha <= 0:
             raise Exception("Alpha must be positive")
         if emitters_num <= 0:
@@ -127,7 +136,7 @@ def make_radon(increased_image, increased_tomograph, real_dim, theta, on_change=
     for i, rotation in enumerate(theta):
         res[i] = get_intersection(rotation, increased_image, increased_tomograph, real_dim)
         if on_change is not None:
-            on_change(si=res)
+            on_change(si=res, iter=i)
     return res
 
 
@@ -171,7 +180,7 @@ def inverse_radon(sigmoid, rotations, output_size, on_change=None):
         reconstructed += rotate(temp, rotations[i])
         result = reconstructed[start:end, start:end]
         if on_change is not None:
-            on_change(isi=result)
+            on_change(isi=result, iter=i)
 
     result = norm(result)
     return result
@@ -226,25 +235,42 @@ class Scanner:
         self.sinogram = None
         self.sinogram_transformed = None
         self.i_sin = None
-        self.im2c = self.im3c = False
+        self.refresh_sinogram = self.refresh_isin = False
         self.on_finish = on_finish
         self.plot = plot
+        self.snapshots = [TransformSnapshot() for _ in self.theta]
 
-    def assign(self, si=None, isi=None, tisi=None):
+    def get_snapshot(self, i):
+        try:
+            i = int(i / 99 * len(self.theta)) - 1
+            snap = self.snapshots[i]
+            self.i_sin = snap.i_isn
+            self.sinogram = snap.sinogram
+            self.refresh_sinogram = True
+            self.refresh_isin = True
+        except Exception:
+            traceback.print_exc()
+
+
+    def assign(self, si=None, isi=None, tisi=None, iter=None):
         if si is not None:
             if self.sinogram is None:
                 self.sinogram = si
                 self.plot.on_sinogram(si)
             else:
                 self.sinogram = si
-            self.im2c = True
+            if iter is not None:
+                self.snapshots[iter].sinogram = np.array(si)
+            self.refresh_sinogram = True
         if isi is not None:
             if self.i_sin is None:
                 self.i_sin = isi
                 self.plot.on_isinogram(isi)
             else:
                 self.i_sin = isi
-            self.im3c = True
+            if iter is not None:
+                self.snapshots[iter].i_isn = np.array(isi)
+            self.refresh_isin = True
         if tisi is not None:
             self.sinogram_transformed = tisi
 

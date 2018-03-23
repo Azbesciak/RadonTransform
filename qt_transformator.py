@@ -1,6 +1,7 @@
 import sys
 import time
 import traceback
+from PyQt5.QtCore import Qt
 from threading import Thread
 
 import matplotlib.animation as animation
@@ -29,7 +30,8 @@ class App(QMainWindow):
         self.width = 1000
         self.height = 800
         self.file_select = self.run_btn = self.emitters_inp = self.alpha_inp = \
-            self.use_filter_cbx = self.use_gauss = self.dicom_btn = None
+            self.use_filter_cbx = self.interactive_mode = self.dicom_btn = self.slider = None
+        self.is_interactive = True
         self.plot = None
         self.scanner = None
         self.is_working = False
@@ -55,9 +57,21 @@ class App(QMainWindow):
         self.add_emitters_input()
         self.add_alpha_input()
         self.add_use_filter_input()
-        self.add_use_gauss_ckbx()
+        self.add_interactive_mode_ckbx()
         self.add_edit_dicom_button()
         self.run_btn.clicked.connect(self.run_task)
+        self.add_slider()
+
+    def add_slider(self):
+        self.slider = QSlider(Qt.Horizontal, self)
+        self.slider.move(340, 700)
+        self.slider.setTickInterval(180)
+        self.slider.setSingleStep(1)
+        self.slider.setTickPosition(QSlider.TicksBothSides)
+        self.slider.setFixedWidth(300)
+        self.slider.setDisabled(True)
+        self.slider.valueChanged.connect(self.on_slider_value_change)
+
 
     def run_task(self, e):
         try:
@@ -65,27 +79,36 @@ class App(QMainWindow):
                 return
             self.is_working = True
             print("New task started.")
-
+            self.slider.setDisabled(True)
             self.run_btn.setDisabled(True)
             self.file_select.setDisabled(True)
             self.plot.update_medium_error_value()
+            self.is_interactive = self.interactive_mode.isChecked()
             tr.params.set_values(self.alpha_inp.value(), self.emitters_inp.value(),
-                                 self.use_filter_cbx.isChecked(), self.file_select.file_name,
-                                 self.use_gauss.isChecked())
+                                 self.use_filter_cbx.isChecked(), self.file_select.file_name)
             self.scanner = tr.Scanner(tr.params, self.plot, on_finish=self.on_finish, image=self.image)
             self.plot.init_new_scan(self.scanner)
             Thread(target=lambda: self.scanner.watch_changes()).start()
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
-            self.on_finish(0)
+            self.on_finish(True)
 
-    def on_finish(self, sleep=0.05):
+    def on_finish(self, wasException=False):
         print("finished work!")
         self.is_working = False
         self.run_btn.setDisabled(False)
         self.file_select.setDisabled(False)
-        time.sleep(sleep)
-        self.plot.clean()
+        if not self.is_interactive or wasException:
+            time.sleep(0.05)
+            self.plot.clean()
+        elif self.is_interactive:
+            self.slider.setDisabled(False)
+
+    def on_slider_value_change(self):
+        value = self.slider.value()
+        if self.scanner is not None:
+            self.scanner.get_snapshot(value)
+        print(value)
 
     def add_edit_dicom_button(self):
         x = App.get_x_position(6)
@@ -105,11 +128,11 @@ class App(QMainWindow):
         self.file_select = SelectFileButton('Select file', self, listener=self.on_file_select)
         self.file_select.move(x, input_margin)
 
-    def add_use_gauss_ckbx(self):
+    def add_interactive_mode_ckbx(self):
         x = App.get_x_position(3)
-        self.use_gauss = QCheckBox('Use Gauss\nfor tomograph', self)
-        self.use_gauss.setChecked(tr.params.use_filter)
-        self.use_gauss.move(x, input_margin)
+        self.interactive_mode = QCheckBox('Interactive\nmode', self)
+        self.interactive_mode.setChecked(self.is_interactive)
+        self.interactive_mode.move(x, input_margin)
 
     def add_use_filter_input(self):
         x = App.get_x_position(2)
@@ -219,14 +242,14 @@ class PlotCanvas(FigureCanvas):
         self.im3 = self.ax3.imshow(i_sin, cmap=plt.cm.Greys_r, animated=True)
 
     def update_sin(self, _):
-        if self.scanner.im2c:
-            self.scanner.im2c = False
+        if self.scanner.refresh_sinogram:
+            self.scanner.refresh_sinogram = False
             self.update_chart(self.im2, self.scanner.sinogram)
         return self.im2,
 
     def update_isin(self, _):
-        if self.scanner.im3c:
-            self.scanner.im3c = False
+        if self.scanner.refresh_isin:
+            self.scanner.refresh_isin = False
             self.update_chart(self.im3, self.scanner.i_sin)
             self.count_medium_error()
         return self.im3,
