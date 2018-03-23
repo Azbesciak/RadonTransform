@@ -5,6 +5,7 @@ from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
 import warnings
+from bresenham import bresenham
 
 img_name_root = "examples/"
 images = [

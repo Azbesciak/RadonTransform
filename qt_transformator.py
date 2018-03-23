@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import *
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import transformer as tr
+from DicomModal import DicomDialog
 from file_select import SelectFileButton
 
 label_margin = 10
@@ -26,13 +27,14 @@ class App(QMainWindow):
         self.title = 'Radon Transformation'
         self.width = 1000
         self.height = 800
-        self.file_select = self.run_btn = self.emitters_inp = self.alpha_inp =\
-            self.use_filter_cbx = self.use_gauss = None
+        self.file_select = self.run_btn = self.emitters_inp = self.alpha_inp = \
+            self.use_filter_cbx = self.use_gauss = self.dicom_btn = None
         self.plot = None
         self.scanner = None
         self.is_working = False
         self.image = None
         self.ds = None
+        self.dicom_modal = None
         self.initUI()
 
     def initUI(self):
@@ -53,6 +55,7 @@ class App(QMainWindow):
         self.add_alpha_input()
         self.add_use_filter_input()
         self.add_use_gauss_ckbx()
+        self.add_edit_dicom_button()
         self.run_btn.clicked.connect(self.run_task)
 
     def run_task(self, e):
@@ -82,6 +85,13 @@ class App(QMainWindow):
         self.file_select.setDisabled(False)
         time.sleep(sleep)
         self.plot.clean()
+
+    def add_edit_dicom_button(self):
+        x = App.get_x_position(6)
+        self.dicom_btn = QPushButton("Edit DICOM", self)
+        self.dicom_btn.clicked.connect(self.show_dicom_edit_modal)
+        self.dicom_btn.setDisabled(True)
+        self.dicom_btn.move(x, input_margin)
 
     def add_run_button(self):
         x = App.get_x_position(5)
@@ -131,10 +141,21 @@ class App(QMainWindow):
         if file_name.lower().endswith((".dc3", ".dcm", ".dic")):
             self.ds = pydicom.dcmread(file_name)
             self.image = self.ds.pixel_array
+            self.dicom_btn.setDisabled(False)
         else:
             self.image = tr.read_image(file_name)
             self.ds = None
+            self.dicom_btn.setDisabled(True)
         self.plot.set_image(self.image)
+
+    def show_dicom_edit_modal(self):
+        if self.dicom_modal is None and self.ds is not None:
+            self.dicom_modal = DicomDialog(self, self.clear_dicom_modal, self.file_select.file_name, self.ds)
+            self.dicom_modal.setModal(False)
+            self.dicom_modal.exec_()
+
+    def clear_dicom_modal(self):
+        self.dicom_modal = None
 
 
 class PlotCanvas(FigureCanvas):
@@ -215,7 +236,7 @@ class PlotCanvas(FigureCanvas):
 
     def create_error_label(self, parent):
         self.medium_error_label = QLabel(parent)
-        self.medium_error_label.move(700, 40)
+        self.medium_error_label.move(700, 60)
         self.medium_error_label.setFixedWidth(200)
 
     def update_medium_error_value(self, value=0):
