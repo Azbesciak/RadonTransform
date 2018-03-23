@@ -12,6 +12,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import transformer as tr
 from DicomModal import DicomDialog
+from dicom_creator import create_dcm_file
 from file_select import SelectFileButton
 
 label_margin = 10
@@ -138,15 +139,20 @@ class App(QMainWindow):
         return index * 120 + 50
 
     def on_file_select(self, file_name):
-        if file_name.lower().endswith((".dc3", ".dcm", ".dic")):
-            self.ds = pydicom.dcmread(file_name)
-            self.image = self.ds.pixel_array
-            self.dicom_btn.setDisabled(False)
-        else:
-            self.image = tr.read_image(file_name)
-            self.ds = None
-            self.dicom_btn.setDisabled(True)
-        self.plot.set_image(self.image)
+        try:
+            if file_name.lower().endswith((".dc3", ".dcm", ".dic")):
+                self.ds = pydicom.dcmread(file_name, force=True)
+                self.ds.file_meta.TransferSyntaxUID = pydicom.uid.ImplicitVRLittleEndian
+                self.image = self.ds.pixel_array
+                self.dicom_btn.setDisabled(False)
+            else:
+                self.image = tr.read_image(file_name)
+                self.ds = create_dcm_file(self.image)
+                self.dicom_btn.setDisabled(False)
+                # self.dicom_btn.setDisabled(True)
+            self.plot.set_image(self.image)
+        except Exception:
+            traceback.print_exc()
 
     def show_dicom_edit_modal(self):
         if self.dicom_modal is None and self.ds is not None:

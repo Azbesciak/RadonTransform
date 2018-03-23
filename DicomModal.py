@@ -143,8 +143,8 @@ class DicomDialog(QDialog):
     def save_file(self):
         file_name = QFileDialog.getSaveFileName(self, 'Save file as...', filter="DICOM (*.dc3 *.dcm *.dic)")
         try:
-            self.set_new_data()
             if len(file_name[0]) > 0:
+                self.set_new_data()
                 pydicom.filewriter.write_file(file_name[0], self.ds)
         except Exception as e:
             traceback.print_exc()
