@@ -204,9 +204,10 @@ def read_image(name):
     return image
 
 
-def prepare_instance(params):
+def prepare_instance(params, image=None):
     theta = get_moves(params.alpha)
-    image = read_image(params.image_name)
+    if image is None:
+        image = read_image(params.image_name)
     image = make_image_square(image)
     return image, theta
 
@@ -214,9 +215,9 @@ def prepare_instance(params):
 class Scanner:
     update_time = 0.2
 
-    def __init__(self, params, plot, on_finish=lambda: None) -> None:
+    def __init__(self, params, plot, image, on_finish=lambda: None) -> None:
         self.params = params
-        self.image, self.theta = prepare_instance(params)
+        self.image, self.theta = prepare_instance(params, image)
         self.increased_image = increase_image(self.image)
         self.increased_tomograph = prepare_increased_tomograph(emitters=params.emitters_num,
                                                                dim=np.max(self.image.shape),

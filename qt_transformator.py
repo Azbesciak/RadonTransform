@@ -6,6 +6,7 @@ from threading import Thread
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+import pydicom
 from PyQt5.QtWidgets import *
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -30,6 +31,8 @@ class App(QMainWindow):
         self.plot = None
         self.scanner = None
         self.is_working = False
+        self.image = None
+        self.ds = None
         self.initUI()
 
     def initUI(self):
@@ -60,27 +63,24 @@ class App(QMainWindow):
             print("New task started.")
 
             self.run_btn.setDisabled(True)
+            self.file_select.setDisabled(True)
             self.plot.update_medium_error_value()
             tr.params.set_values(self.alpha_inp.value(), self.emitters_inp.value(),
                                  self.use_filter_cbx.isChecked(), self.file_select.file_name,
                                  self.use_gauss.isChecked())
-            self.scanner = tr.Scanner(tr.params, self.plot, self.on_finish)
+            self.scanner = tr.Scanner(tr.params, self.plot, on_finish=self.on_finish, image=self.image)
             self.plot.init_new_scan(self.scanner)
             Thread(target=lambda: self.scanner.watch_changes()).start()
         except Exception as e:
             traceback.print_exc()
-            self.is_working = False
-            self.run_btn.setDisabled(False)
-            self.plot.clean()
+            self.on_finish(0)
 
-    def on_image(self, file_name, run_btn):
-        pass
-
-    def on_finish(self):
+    def on_finish(self, sleep=0.05):
         print("finished work!")
         self.is_working = False
         self.run_btn.setDisabled(False)
-        time.sleep(0.05)
+        self.file_select.setDisabled(False)
+        time.sleep(sleep)
         self.plot.clean()
 
     def add_run_button(self):
@@ -91,7 +91,7 @@ class App(QMainWindow):
 
     def add_file_select(self):
         x = App.get_x_position(4)
-        self.file_select = SelectFileButton('Select file', self)
+        self.file_select = SelectFileButton('Select file', self, listener=self.on_file_select)
         self.file_select.move(x, input_margin)
 
     def add_use_gauss_ckbx(self):
@@ -126,6 +126,15 @@ class App(QMainWindow):
     @staticmethod
     def get_x_position(index):
         return index * 120 + 50
+
+    def on_file_select(self, file_name):
+        if file_name.lower().endswith((".dc3", ".dcm", ".dic")):
+            self.ds = pydicom.dcmread(file_name)
+            self.image = self.ds.pixel_array
+        else:
+            self.image = tr.read_image(file_name)
+            self.ds = None
+        self.plot.set_image(self.image)
 
 
 class PlotCanvas(FigureCanvas):
@@ -163,6 +172,11 @@ class PlotCanvas(FigureCanvas):
         self.clean()
         self.ani2 = animation.FuncAnimation(self.fig, self.update_sin, interval=50, blit=True)
         self.ani3 = animation.FuncAnimation(self.fig, self.update_isin, interval=50, blit=True)
+
+    def set_image(self, image):
+        self.image = image
+        self.im1 = self.ax1.imshow(image, cmap=plt.cm.Greys_r, animated=True)
+        self.draw()
 
     def on_new_scan(self, image):
         self.image = image
