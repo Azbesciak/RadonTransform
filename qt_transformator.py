@@ -72,7 +72,6 @@ class App(QMainWindow):
         self.slider.setDisabled(True)
         self.slider.valueChanged.connect(self.on_slider_value_change)
 
-
     def run_task(self, e):
         try:
             if self.is_working:
@@ -108,7 +107,6 @@ class App(QMainWindow):
         value = self.slider.value()
         if self.scanner is not None:
             self.scanner.get_snapshot(value)
-        print(value)
 
     def add_edit_dicom_button(self):
         x = App.get_x_position(6)

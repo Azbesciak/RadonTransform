@@ -242,7 +242,7 @@ class Scanner:
 
     def get_snapshot(self, i):
         try:
-            i = int(i / 99 * len(self.theta)) - 1
+            i = int(i / 99 * (len(self.theta)-1))
             snap = self.snapshots[i]
             self.i_sin = snap.i_isn
             self.sinogram = snap.sinogram
@@ -250,7 +250,6 @@ class Scanner:
             self.refresh_isin = True
         except Exception:
             traceback.print_exc()
-
 
     def assign(self, si=None, isi=None, tisi=None, iter=None):
         if si is not None:
