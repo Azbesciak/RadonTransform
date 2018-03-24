@@ -192,7 +192,6 @@ class PlotCanvas(FigureCanvas):
         self.ax2.set_axis_off()
         self.ax3.set_axis_off()
         self.image = None
-        self.medium_error = 0
         self.medium_error_label = None
         self.im1 = self.im2 = self.im3 = None
         self.ani2 = self.ani3 = None
@@ -249,12 +248,11 @@ class PlotCanvas(FigureCanvas):
         if self.scanner.refresh_isin:
             self.scanner.refresh_isin = False
             self.update_chart(self.im3, self.scanner.i_sin)
-            self.count_medium_error()
+            self.count_medium_error(self.scanner.square_error)
         return self.im3,
 
-    def count_medium_error(self):
-        self.medium_error = self.get_medium_squared_error(self.image, self.scanner.i_sin)
-        self.update_medium_error_value(self.medium_error)
+    def count_medium_error(self, value=0):
+        self.update_medium_error_value(value)
 
     @staticmethod
     def update_chart(im, data):
@@ -277,21 +275,6 @@ class PlotCanvas(FigureCanvas):
         if self.ani3 is not None:
             self.ani3.event_source.stop()
         self.ani3 = self.ani2 = None
-
-    @staticmethod
-    def get_medium_squared_error(original, reconstructed):
-        if original is not None and reconstructed is not None:
-            original_copy = original - original.min()
-            reconstructed_copy = reconstructed - reconstructed.min()
-            org_copy_max = original_copy.max()
-            rec_copy_max = reconstructed_copy.max()
-            if rec_copy_max > 0 and org_copy_max > 0 and rec_copy_max is not org_copy_max:
-                reconstructed_copy /= (rec_copy_max / org_copy_max)
-            dif = original_copy - reconstructed_copy
-            dif **= 2
-            return dif.sum() / dif.size
-        else:
-            return 0
 
 
 if __name__ == '__main__':

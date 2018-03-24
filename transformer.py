@@ -28,9 +28,10 @@ image_indx = 8
 
 class TransformSnapshot:
 
-    def __init__(self, sinogram=None, i_sin=None) -> None:
+    def __init__(self, sinogram=None, i_sin=None, square_error=None) -> None:
         self.sinogram = sinogram
         self.i_isn = i_sin
+        self.square_error = square_error
 
 
 class Parameters:
@@ -226,6 +227,21 @@ def prepare_instance(params, image=None):
     return image, theta
 
 
+def get_medium_squared_error(original, reconstructed):
+    if original is not None and reconstructed is not None:
+        original_copy = original - original.min()
+        reconstructed_copy = reconstructed - reconstructed.min()
+        org_copy_max = original_copy.max()
+        rec_copy_max = reconstructed_copy.max()
+        if rec_copy_max > 0 and org_copy_max > 0 and rec_copy_max is not org_copy_max:
+            reconstructed_copy /= (rec_copy_max / org_copy_max)
+        dif = original_copy - reconstructed_copy
+        dif **= 2
+        return dif.sum() / dif.size
+    else:
+        return 0
+
+
 class Scanner:
     update_time = 0.2
 
@@ -239,6 +255,7 @@ class Scanner:
         self.sinogram = None
         self.sinogram_transformed = None
         self.i_sin = None
+        self.square_error = 0
         self.refresh_sinogram = self.refresh_isin = False
         self.on_finish = on_finish
         self.plot = plot
@@ -252,6 +269,7 @@ class Scanner:
             self.sinogram = snap.sinogram
             self.refresh_sinogram = True
             self.refresh_isin = True
+            self.square_error = snap.square_error
         except Exception:
             traceback.print_exc()
 
@@ -273,6 +291,8 @@ class Scanner:
                 self.i_sin = isi
             if iter is not None:
                 self.snapshots[iter].i_isn = np.array(isi)
+                self.square_error = get_medium_squared_error(self.image, isi)
+                self.snapshots[iter].square_error = self.square_error
             self.refresh_isin = True
         if tisi is not None:
             self.sinogram_transformed = tisi
