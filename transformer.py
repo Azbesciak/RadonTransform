@@ -207,6 +207,10 @@ def transform_sinogram_if_enabled(params, sinogram):
 
 def read_image(name):
     image = imread(name, as_grey=True)
+    return normalize_img(image)
+
+
+def normalize_img(image):
     image = rescale(image, scale=0.4, mode='reflect')
     max_image_value = np.max(image)
     if max_image_value > 1:
@@ -242,7 +246,7 @@ class Scanner:
 
     def get_snapshot(self, i):
         try:
-            i = int(i / 99 * (len(self.theta)-1))
+            i = int(i / 99 * (len(self.theta) - 1))
             snap = self.snapshots[i]
             self.i_sin = snap.i_isn
             self.sinogram = snap.sinogram

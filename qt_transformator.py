@@ -164,7 +164,7 @@ class App(QMainWindow):
             if file_name.lower().endswith((".dc3", ".dcm", ".dic")):
                 self.ds = pydicom.dcmread(file_name, force=True)
                 self.ds.file_meta.TransferSyntaxUID = pydicom.uid.ImplicitVRLittleEndian
-                self.image = self.ds.pixel_array
+                self.image = tr.normalize_img(self.ds.pixel_array)
                 self.dicom_btn.setDisabled(False)
             else:
                 self.image = tr.read_image(file_name)
