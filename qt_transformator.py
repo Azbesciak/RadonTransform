@@ -187,14 +187,19 @@ class App(QMainWindow):
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=8, height=8, dpi=100):
-        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(1, 3, figsize=(width, height), dpi=dpi)
+        self.fig, _ = plt.subplots(12, 9, figsize=(width, height), dpi=dpi)
+        self.ax1 = plt.subplot2grid((12, 9), (3, 0), rowspan=9, colspan=3)
+        self.ax2 = plt.subplot2grid((12, 9), (3, 3), rowspan=9, colspan=3)
+        self.ax3 = plt.subplot2grid((12, 9), (3, 6), rowspan=9, colspan=3)
+        self.ax_err = None
+        self.prepare_error_chart()
         self.ax1.set_axis_off()
         self.ax2.set_axis_off()
         self.ax3.set_axis_off()
         self.image = None
         self.medium_error_label = None
-        self.im1 = self.im2 = self.im3 = None
-        self.ani2 = self.ani3 = None
+        self.im1 = self.im2 = self.im3 = self.im_err = None
+        self.ani2 = self.ani3 = self.ani_err = None
         self.ta2 = self.ta3 = None
         FigureCanvas.__init__(self, self.fig)
         self.setParent(parent)
@@ -206,11 +211,26 @@ class PlotCanvas(FigureCanvas):
         FigureCanvas.updateGeometry(self)
         self.plot()
 
+    def prepare_error_chart(self):
+        plt.subplot2grid((12, 9), (0, 0), colspan=9, rowspan=3).set_axis_off()
+        self.ax_err = plt.subplot2grid((12, 9), (1, 6), colspan=3, rowspan=2)
+        for label in (self.ax_err.get_xticklabels() + self.ax_err.get_yticklabels()):
+            label.set_fontname('Arial')
+            label.set_fontsize(5)
+        self.ax_err.set_ylim([0,1])
+        self.ax_err.set_yticks(np.arange(0, 1.1, 0.2))
+        # self.ax_err.setti
+
+    def set_iterations(self, iterations):
+        self.ax_err.set_xlim([0, iterations])
+        self.ax_err.set_xticks(np.arange(0, iterations+1, iterations//5))
+
     def plot(self):
         zeros = np.zeros((400, 400))
         self.im1 = self.ax1.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
         self.im2 = self.ax2.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
         self.im3 = self.ax3.imshow(zeros, cmap=plt.cm.Greys_r, animated=True)
+        self.im_err = self.ax_err.plot([])[0]
         self.draw()
 
     def init_new_scan(self, scanner):
@@ -219,16 +239,18 @@ class PlotCanvas(FigureCanvas):
         self.clean()
         self.ani2 = animation.FuncAnimation(self.fig, self.update_sin, interval=50, blit=True)
         self.ani3 = animation.FuncAnimation(self.fig, self.update_isin, interval=50, blit=True)
+        self.ani_err = animation.FuncAnimation(self.fig, self.update_error, interval=50, blit=True, repeat=False)
 
     def set_image(self, image):
         self.image = image
         self.im1 = self.ax1.imshow(image, cmap=plt.cm.Greys_r, animated=True)
         self.draw()
 
-    def on_new_scan(self, image):
+    def on_new_scan(self, image, iterations):
         self.image = image
         print("new scan!")
         self.update_chart(self.im1, image)
+        self.set_iterations(iterations)
 
     def on_sinogram(self, sinogram):
         print("new sinogram came")
@@ -251,6 +273,10 @@ class PlotCanvas(FigureCanvas):
             self.count_medium_error(self.scanner.square_error)
         return self.im3,
 
+    def update_error(self, _):
+        [self.im_err] = self.ax_err.plot(self.scanner.errors_history)
+        return self.im_err,
+
     def count_medium_error(self, value=0):
         self.update_medium_error_value(value)
 
@@ -261,11 +287,12 @@ class PlotCanvas(FigureCanvas):
 
     def create_error_label(self, parent):
         self.medium_error_label = QLabel(parent)
-        self.medium_error_label.move(700, 60)
+        self.medium_error_label.move(700, 80)
         self.medium_error_label.setFixedWidth(200)
+        self.update_medium_error_value()
 
     def update_medium_error_value(self, value=0):
-        self.medium_error_label.setText("medium square error: %6.4f" % value)
+        self.medium_error_label.setText("Medium square error: %6.4f" % value)
 
     def clean(self):
         if self.scanner is not None:
@@ -284,5 +311,6 @@ if __name__ == '__main__':
         ex = App()
         res = app.exec_()
     except Exception:
+        traceback.print_exc()
         print("exiting")
     sys.exit(res)

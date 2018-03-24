@@ -260,6 +260,7 @@ class Scanner:
         self.on_finish = on_finish
         self.plot = plot
         self.snapshots = [TransformSnapshot() for _ in self.theta]
+        self.errors_history = []
 
     def get_snapshot(self, i):
         try:
@@ -268,10 +269,17 @@ class Scanner:
             self.i_sin = snap.i_isn
             self.sinogram = snap.sinogram
             self.refresh_sinogram = True
-            self.refresh_isin = True
             self.square_error = snap.square_error
+            self.get_errors_history_to_iteration(i, False)
+            self.refresh_isin = True
         except Exception:
             traceback.print_exc()
+
+    def get_errors_history_to_iteration(self, i, append_mode=True):
+        if append_mode:
+            self.errors_history.append(self.snapshots[i].square_error)
+        else:
+            self.errors_history = [s.square_error for s in self.snapshots[:i]]
 
     def assign(self, si=None, isi=None, tisi=None, iter=None):
         if si is not None:
@@ -293,12 +301,13 @@ class Scanner:
                 self.snapshots[iter].i_isn = np.array(isi)
                 self.square_error = get_medium_squared_error(self.image, isi)
                 self.snapshots[iter].square_error = self.square_error
+                self.get_errors_history_to_iteration(iter)
             self.refresh_isin = True
         if tisi is not None:
             self.sinogram_transformed = tisi
 
     def watch_changes(self):
-        self.plot.on_new_scan(self.image)
+        self.plot.on_new_scan(self.image, len(self.theta))
         sinogram = make_radon(self.increased_image, self.increased_tomograph,
                               len(self.image), self.theta, on_change=self.assign)
         sinogram_transformed = transform_sinogram_if_enabled(self.params, sinogram)
