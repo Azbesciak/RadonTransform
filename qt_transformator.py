@@ -168,7 +168,7 @@ class App(QMainWindow):
                 self.dicom_btn.setDisabled(False)
             else:
                 self.image = tr.read_image(file_name)
-                self.ds = create_dcm_file(self.image)
+                self.ds = create_dcm_file(np.array(self.image))
                 self.dicom_btn.setDisabled(False)
                 # self.dicom_btn.setDisabled(True)
             self.plot.set_image(self.image)
