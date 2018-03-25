@@ -2,10 +2,13 @@ import os
 import tempfile
 import datetime
 import traceback
-
+import matplotlib.pyplot as plt
 import pydicom
 from PIL import Image
 from pydicom.dataset import Dataset, FileDataset
+from pydicom.filewriter import correct_ambiguous_vr
+
+from transformer import read_image
 
 
 def create_dcm_file(image):
@@ -33,38 +36,50 @@ def create_dcm_file(image):
     ds.PixelRepresentation = 1
     # Set the transfer syntax
     ds.is_little_endian = True
-    ds.is_implicit_VR = True
-
-    # Set creation date/time
+    ds.is_implicit_VR = False
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.PixelRepresentation = 1
+    ds.HighBit = 15
+    ds.BitsStored = 16
+    ds.BitsAllocated = 16
+    ds.SmallestImagePixelValue = str.encode('\x00\x00')
+    ds.LargestImagePixelValue = str.encode('\xff\xff')
+    ds.Columns = image.shape[0]
+    ds.Rows = image.shape[1]    # Set creation date/time
     dt = datetime.datetime.now()
     ds.ContentDate = dt.strftime('%Y%m%d')
     timeStr = dt.strftime('%H%M%S.%f')  # long format with micro seconds
     ds.ContentTime = timeStr
     try:
+        if image.max() <= 1:
+            image *= 255
+            image = image.astype("uint16")
         ds.PixelData = Image.fromarray(image).tobytes()
     except Exception:
         traceback.print_exc()
     print("Writing test file", filename_little_endian)
-    # pydicom.filewriter.correct_ambiguous_vr(ds, True)
+    ds.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+    ds = correct_ambiguous_vr(ds, True)
     ds.save_as(filename_little_endian)
     print("File saved.")
 
-    # Write as a different transfer syntax XXX shouldn't need this but pydicom
-    # 0.9.5 bug not recognizing transfer syntax
-    # ds.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
-    # ds.is_little_endian = True
-    # ds.is_implicit_VR = True
-    # pydicom.filewriter.correct_ambiguous_vr(ds, True)
-    # # reopen the data just for checking
-    # print("Writing test file", filename_little_endian)
-    #
-    # ds.save_as(filename_little_endian)
     print("File saved.")
     print('Load file {} ...'.format(filename_little_endian))
     ds = pydicom.dcmread(filename_little_endian)
-    # print(ds)
-
-    # remove the created file
     print('Remove file {} ...'.format(filename_little_endian))
     os.remove(filename_little_endian)
     return ds
+
+
+if __name__ == '__main__':
+    image = read_image("./examples/Kropka.jpg")
+    dcm = create_dcm_file(image)
+    file_name = "dcm.dcm"
+    pydicom.filewriter.write_file(file_name, dcm)  # extension required
+    # dcm.save_as(file_name)
+    ds = pydicom.dcmread(file_name)
+    array = ds.pixel_array
+    plt.imshow(array)
+    plt.show()
+
