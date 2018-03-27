@@ -7,7 +7,6 @@ from skimage.filters import gaussian
 from skimage.io import imread
 from skimage.transform import rescale, rotate
 import warnings
-from bresenham import bresenham
 
 img_name_root = "examples/"
 images = [
@@ -23,7 +22,48 @@ images = [
 ]
 images = [img_name_root + n for n in images]
 
-image_indx = 8
+image_indx = 4
+
+
+class Tomograph:
+    def __init__(self, dim, emitters):
+        self.dim = int(dim * np.sqrt(2))
+        self.emitters = Tomograph.validate_emitters_num(emitters, dim)
+        self.tomograph, self.indexes = self.prepare_tomograph()
+        self.width = len(self.indexes)
+
+    @staticmethod
+    def validate_emitters_num(emitters, dim):
+        if emitters > dim:
+            warnings.warn("emmiters num was bigger than image dim - used smaller")
+        return np.min((emitters, dim))
+
+    def prepare_tomograph(self):
+        tomo, indexes = self.create_filter_at([1])
+        tomo = gaussian(tomo)
+        tomo /= tomo.max()
+        tomo = np.rot90(tomo)
+        return tomo, indexes
+
+    def create_filter_at(self, filter):
+        tomo = np.zeros((self.dim, self.dim))
+        distance = int(self.dim / self.emitters)
+        start = int(distance / 2)
+        half_len = len(filter) // 2
+        indexes = []
+        for i in range(len(filter)):
+            begin = start + i - half_len
+            tomo[:, begin::distance] = filter[i]
+            indexes.extend(list(range(begin, self.dim, distance)))
+        return tomo, list(dict.fromkeys(indexes))
+
+    def get_intersection(self, rotation, image, real_dim):
+        rotation += 90
+        rotated = rotate(self.tomograph, rotation)
+        common_part = rotated * image
+        common_rotated_again = rotate(common_part, -rotation-90)
+        column_avg = [sum(q) / real_dim for q in common_rotated_again[self.indexes]]
+        return column_avg
 
 
 class TransformSnapshot:
@@ -59,7 +99,7 @@ class Parameters:
         self.use_omega = use_omega
 
 
-params = Parameters(180 / 360, 800, True, images[image_indx])
+params = Parameters(180 / 360, 10, True, images[image_indx])
 
 
 def draw_image(i, img):
@@ -96,46 +136,10 @@ def increase_image(img):
     return pad_image(img, int(np_max_dim * np.sqrt(2)), shape)
 
 
-def create_filter_at(target, start, distance, filter):
-    half_len = len(filter) // 2
-    for i in range(len(filter)):
-        to_write = i - half_len,
-        target[:, start + to_write[0]::distance] = filter[i]
-
-
-def prepare_increased_tomograph(emitters, dim, use_gauss):
-    dim = int(dim * np.sqrt(2))
-    return prepare_tomograph(emitters, dim, use_gauss)
-
-
-def prepare_tomograph(emitters, dim, use_gauss):
-    if emitters > dim:
-        warnings.warn("emmiters num was bigger than image dim - used smaller")
-    emitters = np.min((emitters, dim))
-    tomo = np.zeros((dim, dim))
-    distance = int(dim / emitters)
-    start = int(np.ceil(distance / 2))
-    create_filter_at(tomo, start, distance, [1])
-    if use_gauss:
-        tomo = gaussian(tomo)
-    tomo /= tomo.max()
-    tomo = np.rot90(tomo)
-    return tomo
-
-
-def get_intersection(rotation, image, tomograph, real_dim):
-    rotation += 90
-    rotated = rotate(tomograph, rotation)
-    common_part = rotated * image
-    common_rotated_again = rotate(common_part, -rotation)
-    column_avg = [sum(q) / real_dim for q in common_rotated_again]
-    return column_avg
-
-
-def make_radon(increased_image, increased_tomograph, real_dim, theta, on_change=None):
-    res = np.zeros((len(theta), len(increased_tomograph)))
+def make_radon(increased_image, tomograph, real_dim, theta, on_change=None):
+    res = np.zeros((len(theta), tomograph.width))
     for i, rotation in enumerate(theta):
-        res[i] = get_intersection(rotation, increased_image, increased_tomograph, real_dim)
+        res[i] = tomograph.get_intersection(rotation, increased_image, real_dim)
         if on_change is not None:
             on_change(si=res, iter=i)
     return res
@@ -168,7 +172,7 @@ def norm(mat):
     return mat
 
 
-def inverse_radon(sigmoid, rotations, output_size, on_change=None):
+def inverse_radon(sigmoid, rotations, output_size, tomograph, on_change=None):
     reconstructed = increase_image(np.zeros((output_size, output_size)))
     reconstr_len = len(reconstructed)
     start = (reconstr_len - output_size) // 2
@@ -176,9 +180,11 @@ def inverse_radon(sigmoid, rotations, output_size, on_change=None):
     rotations_len = len(rotations)
     result = reconstructed[start:end, start:end]
     for i in range(rotations_len):
-        temp = np.array([sigmoid[i], ] * reconstr_len)
+        temp = np.zeros(tomograph.dim)
+        temp[tomograph.indexes] = sigmoid[i]
+        temp = np.array([temp, ] * reconstr_len)
         temp = make_image_square(temp)
-        reconstructed += rotate(temp, rotations[i])
+        reconstructed += rotate(temp, rotations[i]+90)
         result = reconstructed[start:end, start:end]
         if on_change is not None:
             on_change(isi=result, iter=i)
@@ -249,9 +255,7 @@ class Scanner:
         self.params = params
         self.image, self.theta = prepare_instance(params, image)
         self.increased_image = increase_image(self.image)
-        self.increased_tomograph = prepare_increased_tomograph(emitters=params.emitters_num,
-                                                               dim=np.max(self.image.shape),
-                                                               use_gauss=params.use_gauss)
+        self.tomograph = Tomograph(emitters=params.emitters_num, dim=np.max(self.image.shape))
         self.sinogram = None
         self.sinogram_transformed = None
         self.i_sin = None
@@ -308,21 +312,20 @@ class Scanner:
 
     def watch_changes(self):
         self.plot.on_new_scan(self.image, len(self.theta))
-        sinogram = make_radon(self.increased_image, self.increased_tomograph,
+        sinogram = make_radon(self.increased_image, self.tomograph,
                               len(self.image), self.theta, on_change=self.assign)
         sinogram_transformed = transform_sinogram_if_enabled(self.params, sinogram)
         self.assign(tisi=sinogram_transformed)
-        i_sin = inverse_radon(sinogram_transformed, self.theta, len(self.image), on_change=self.assign)
+        i_sin = inverse_radon(sinogram_transformed, self.theta, len(self.image), self.tomograph, on_change=self.assign)
         self.on_finish()
 
 
 if __name__ == "__main__":
     image, theta = prepare_instance(params)
     increased_image = increase_image(image)
-    increased_tomograph = prepare_increased_tomograph(emitters=params.emitters_num,
-                                                      dim=np.max(image.shape), use_gauss=params.use_gauss)
-    sinogram = make_radon(increased_image, increased_tomograph, len(image), theta)
+    tomograph = Tomograph(emitters=params.emitters_num, dim=np.max(image.shape))
+    sinogram = make_radon(increased_image, tomograph, len(image), theta)
     sinogram_transformed = transform_sinogram_if_enabled(params, sinogram)
-    i_sin = inverse_radon(sinogram_transformed, theta, len(image))
+    i_sin = inverse_radon(sinogram_transformed, theta, len(image), tomograph)
 
     show_images(image, sinogram, i_sin)
