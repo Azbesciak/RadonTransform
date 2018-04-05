@@ -10,6 +10,7 @@ import numpy as np
 import pydicom
 from PyQt5.QtWidgets import *
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from qtpy import QtWidgets
 
 import transformer as tr
 from DicomModal import DicomDialog
@@ -38,13 +39,16 @@ class App(QMainWindow):
         self.image = None
         self.ds = None
         self.dicom_modal = None
-        self.initUI()
+        self.result_table = None
+        self.current_row = 0
+        self.init_ui()
 
-    def initUI(self):
+    def init_ui(self):
         self.setWindowTitle(self.title)
         self.setGeometry(self.left, self.top, self.width, self.height)
         self.init_plot()
         self.init_buttons()
+        self.init_table()
         self.show()
 
     def init_plot(self):
@@ -102,6 +106,9 @@ class App(QMainWindow):
             self.plot.clean()
         elif self.is_interactive:
             self.slider.setDisabled(False)
+        if not wasException:
+            self.add_row_to_table(file=tr.params.image_name.split("/")[-1], alpha=tr.params.alpha,
+                                  emitters=tr.params.emitters_num, error=self.scanner.square_error)
 
     def on_slider_value_change(self):
         value = self.slider.value()
@@ -154,6 +161,24 @@ class App(QMainWindow):
         self.alpha_inp = QDoubleSpinBox(self)
         self.alpha_inp.setValue(tr.params.alpha)
         self.alpha_inp.move(x, input_margin)
+
+    def init_table(self):
+        self.result_table = QTableWidget(self)
+        self.result_table.setRowCount(1)
+        self.result_table.setColumnCount(4)
+        self.result_table.setHorizontalHeaderLabels(["File", "Alpha", "Emitters", "MS Error"])
+        self.result_table.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustToContents)
+        [self.result_table.setColumnWidth(i, 100) for i in [0,3]]
+        [self.result_table.setColumnWidth(i, 70) for i in [1,2]]
+        self.result_table.setFixedWidth(361)
+        self.result_table.setFixedHeight(200)
+        self.result_table.move(50, 100)
+
+    def add_row_to_table(self, file, alpha, emitters, error):
+        for (i, t) in enumerate([file, alpha, emitters, error]):
+            self.result_table.setItem(self.current_row, i, QTableWidgetItem(str(t)))
+        self.current_row += 1
+        self.result_table.setRowCount(self.current_row+1)
 
     @staticmethod
     def get_x_position(index):
